@@ -1,0 +1,5 @@
+{
+  "grid": {"id": "utm19-demo-v1", "crs": "EPSG:32619", "origin": [503500, 4856500], "size": 1000},
+  "cache": "output/vgds-cache/mock",
+  "osgb": true
+}

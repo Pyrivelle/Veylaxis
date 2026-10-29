@@ -1,0 +1,47 @@
+include(${PROJECT_SOURCE_DIR}/cmake/VgdsCore.cmake)
+add_library(VgdsData STATIC src/vgds/Geometry.cpp src/vgds/IslandFixture.cpp
+    src/vgds/Hash.cpp src/vgds/LocalService.cpp src/vgds/TileClient.cpp
+    src/vgds/S57.cpp src/vgds/Configuration.cpp src/vgds/Catalog.cpp src/vgds/TileCache.cpp src/vgds/IslandTerrain.cpp
+    src/vgds/Bathymetry.cpp src/vgds/BathymetryReader.cpp src/reconstruction.cpp)
+target_sources(VgdsData PRIVATE src/vgds/Cancellation.cpp)
+veylaxis_add_vgds(VgdsData)
+target_include_directories(VgdsData PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(VgdsData PRIVATE GDAL::GDAL bcrypt)
+if(VEYLAXIS_VGDS_OSGB)
+  # This installed unofficial-osg package omits include directories on its targets.
+  find_path(VEYLAXIS_OSG_INCLUDE_DIR osg/Node REQUIRED)
+  add_library(VgdsOsgBuilder STATIC src/vgds/OsgBuilder.cpp)
+  target_include_directories(VgdsOsgBuilder PUBLIC ${VEYLAXIS_OSG_INCLUDE_DIR})
+  target_include_directories(VgdsOsgBuilder PRIVATE ${PROJECT_SOURCE_DIR}/third_party/earcut/include)
+  target_link_libraries(VgdsOsgBuilder PUBLIC VgdsData PRIVATE unofficial::osg::osg unofficial::osg::osgDB)
+  target_compile_definitions(VgdsOsgBuilder PUBLIC VEYLAXIS_HAS_OSGB=1)
+  if(MSVC)
+    target_compile_options(VgdsOsgBuilder PRIVATE /W4 /utf-8)
+  endif()
+endif()
+function(veylaxis_add_streaming target)
+  target_compile_definitions(${target} PRIVATE VEYLAXIS_DMU_PLUGIN_DIR="${PROJECT_SOURCE_DIR}/plugins/osgPlugins-3.6.5")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/plugins/osgPlugins-3.6.5/osgdb_dmu.dll")
+  add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target}>/osgPlugins-3.6.5"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/plugins/osgPlugins-3.6.5/osgdb_dmu.dll" "$<TARGET_FILE_DIR:${target}>/osgPlugins-3.6.5/osgdb_dmu.dll")
+  endif()
+  # The supplied plugin imports zlib.dll; vcpkg exports the compatible zlib API as z.dll.
+  add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/z.dll" "$<TARGET_FILE_DIR:${target}>/zlib.dll")
+  foreach(component osgSim osgFX osgTerrain osgVolume)
+    add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/${component}.dll" "$<TARGET_FILE_DIR:${target}>/${component}.dll")
+  endforeach()
+  target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src/streaming/TileManager.cpp ${PROJECT_SOURCE_DIR}/src/streaming/TileLoader.cpp ${PROJECT_SOURCE_DIR}/src/streaming/ModelRegistry.cpp)
+  target_link_libraries(${target} PRIVATE VgdsOsgBuilder nlohmann_json::nlohmann_json)
+endfunction()
+add_executable(VgdsService src/vgds/ServiceMain.cpp)
+set_property(TARGET VgdsService PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+set_property(TARGET VgdsService PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "--config config/vgds-mock.json")
+target_link_libraries(VgdsService PRIVATE VgdsData nlohmann_json::nlohmann_json)
+if(VEYLAXIS_VGDS_OSGB)
+  target_link_libraries(VgdsService PRIVATE VgdsOsgBuilder)
+endif()
+if(MSVC)
+  target_compile_options(VgdsService PRIVATE /W4 /utf-8)
+endif()

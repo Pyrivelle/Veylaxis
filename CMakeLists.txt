@@ -1,0 +1,180 @@
+cmake_minimum_required(VERSION 3.24)
+project(Veylaxis VERSION 0.1.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+option(VEYLAXIS_VGDS_ONLY "Build pure VGDS data tests without rendering/geospatial SDKs" OFF)
+if(VEYLAXIS_VGDS_ONLY)
+  include(cmake/VgdsCore.cmake)
+  enable_testing()
+  add_executable(Test tests/vgds/main.cpp tests/vgds/CoreTests.cpp)
+  veylaxis_add_vgds(Test)
+  add_test(NAME vgds_core COMMAND Test)
+  return()
+endif()
+option(VEYLAXIS_VGDS_OSGB "Build optional VGDS OSG rendering cache builder" ON)
+option(VEYLAXIS_VGDS_SERVICE_ONLY "Build VGDS service/tests without marine SDKs" OFF)
+if(VEYLAXIS_VGDS_SERVICE_ONLY)
+  find_package(GDAL CONFIG REQUIRED)
+  if(VEYLAXIS_VGDS_OSGB)
+    find_package(unofficial-osg CONFIG REQUIRED)
+  endif()
+  include(cmake/VgdsService.cmake)
+  enable_testing()
+  add_executable(Test tests/vgds/ServiceMain.cpp tests/vgds/ServiceTests.cpp tests/vgds/CoreTests.cpp tests/vgds/S57Tests.cpp)
+  target_compile_definitions(Test PRIVATE VEYLAXIS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+  target_sources(Test PRIVATE tests/vgds/CatalogTests.cpp tests/vgds/IslandTerrainTests.cpp)
+  add_test(NAME vgds_island COMMAND Test --island)
+  target_sources(Test PRIVATE tests/vgds/SeabedMaritimeTests.cpp)
+  add_test(NAME vgds_seabed_maritime COMMAND Test --seabed-maritime)
+  target_sources(Test PRIVATE tests/vgds/AcceptanceTests.cpp)
+  add_test(NAME vgds_acceptance COMMAND Test --acceptance)
+  add_test(NAME vgds_catalog COMMAND Test --catalog)
+  target_link_libraries(Test PRIVATE VgdsData nlohmann_json::nlohmann_json GDAL::GDAL)
+  if(VEYLAXIS_VGDS_OSGB)
+    veylaxis_add_streaming(Test)
+    target_sources(Test PRIVATE tests/vgds/StreamingTests.cpp tests/vgds/NavigationModelTests.cpp)
+    target_link_libraries(Test PRIVATE VgdsOsgBuilder unofficial::osg::osg unofficial::osg::osgDB)
+    add_test(NAME vgds_streaming COMMAND Test --streaming)
+    add_test(NAME navigation_models COMMAND Test --navigation-models)
+    add_test(NAME dmu_models COMMAND Test --dmu-models)
+    set_tests_properties(dmu_models PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
+  add_test(NAME vgds_core COMMAND Test --vgds)
+  add_test(NAME vgds_service COMMAND Test)
+  add_test(NAME vgds_s57 COMMAND Test --s57)
+  if(DEFINED VCPKG_INSTALLED_DIR)
+    set(vgds_prefix "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+    get_property(vgds_tests DIRECTORY PROPERTY TESTS)
+    set_tests_properties(${vgds_tests} PROPERTIES
+      ENVIRONMENT "GDAL_DATA=${vgds_prefix}/share/gdal;S57_CSV=${vgds_prefix}/share/gdal;PROJ_DATA=${vgds_prefix}/share/proj;GDAL_DRIVER_PATH=disable;OSG_LIBRARY_PATH=${vgds_prefix}/plugins/osgPlugins-3.6.5"
+      ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${vgds_prefix}/bin")
+  endif()
+  return()
+endif()
+# Rerun scripts/build.ps1 after CMake/source-list changes; no ZERO_CHECK project.
+set(CMAKE_SUPPRESS_REGENERATION ON)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake helpers")
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Veylaxis)
+find_package(GDAL CONFIG REQUIRED)
+find_package(unofficial-osg CONFIG REQUIRED)
+set(VEYLAXIS_SDK_ROOT "D:/SDK" CACHE PATH "SilverLining and Triton SDK root")
+set(VEYLAXIS_QT_ROOT "D:/Qt/Qt5.14.2/5.14.2/msvc2017_64" CACHE PATH "Qt Core/Gui runtime used by marine adapters")
+find_package(Qt5 REQUIRED COMPONENTS Core Gui PATHS "${VEYLAXIS_QT_ROOT}/lib/cmake/Qt5" NO_DEFAULT_PATH)
+include(cmake/VgdsService.cmake)
+
+add_executable(Veylaxis src/main.cpp src/bathymetry.cpp src/viewer.cpp
+    src/reconstruction.cpp src/CameraNavigation.h include/veylaxis/reconstruction.hpp
+    src/environment/SilverLiningSkyBox.cpp src/environment/SilverLiningSkyBox.h
+    src/environment/TritonOceanSurface.cpp src/environment/TritonOceanSurface.h
+    src/environment/MarineEnvironment.cpp src/environment/MarineEnvironment.h
+    src/environment/AppLog.h src/environment/RenderBinDefinitions.h)
+target_include_directories(Veylaxis PRIVATE include)
+if(VEYLAXIS_VGDS_OSGB)
+  veylaxis_add_streaming(Veylaxis)
+  target_sources(Veylaxis PRIVATE src/streaming/Viewer.cpp)
+  target_link_libraries(Veylaxis PRIVATE VgdsOsgBuilder nlohmann_json::nlohmann_json)
+  target_link_libraries(Veylaxis PRIVATE psapi)
+endif()
+target_include_directories(Veylaxis PRIVATE src/environment
+    "${VEYLAXIS_SDK_ROOT}/SilverLining/Public Headers" "${VEYLAXIS_SDK_ROOT}/Triton/Public Headers")
+target_compile_definitions(Veylaxis PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(Veylaxis PRIVATE GDAL::GDAL unofficial::osg::osg
+    unofficial::osg::osgDB unofficial::osg::osgUtil unofficial::osg::osgGA unofficial::osg::osgViewer
+    Qt5::Core Qt5::Gui opengl32
+    "${VEYLAXIS_SDK_ROOT}/SilverLining/lib/vc14/x64/SilverLining-MT-DLL.lib"
+    "${VEYLAXIS_SDK_ROOT}/Triton/lib/vc14/x64/Triton-MT-DLL.lib")
+add_custom_command(TARGET Veylaxis POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" "-DAPP_DIR=$<TARGET_FILE_DIR:Veylaxis>"
+      "-DSDK_ROOT=${VEYLAXIS_SDK_ROOT}" "-DQT_ROOT=${VEYLAXIS_QT_ROOT}"
+      "-DSOURCE_ROOT=${CMAKE_SOURCE_DIR}" -P "${CMAKE_SOURCE_DIR}/cmake/DeployMarine.cmake" VERBATIM)
+set_property(TARGET Veylaxis PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+source_group(TREE "${CMAKE_SOURCE_DIR}" FILES src/main.cpp src/bathymetry.cpp
+    src/viewer.cpp src/reconstruction.cpp src/CameraNavigation.h include/veylaxis/reconstruction.hpp
+    src/environment/SilverLiningSkyBox.cpp src/environment/SilverLiningSkyBox.h
+    src/environment/TritonOceanSurface.cpp src/environment/TritonOceanSurface.h
+    src/environment/MarineEnvironment.cpp src/environment/MarineEnvironment.h
+    src/environment/AppLog.h src/environment/RenderBinDefinitions.h)
+
+# enable_testing rather than include(CTest): no CDash dashboard projects.
+option(BUILD_TESTING "Build the single Test project" ON)
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(Test tests/main.cpp tests/reconstruction_tests.cpp tests/raster_check.cpp tests/scene_check.cpp tests/camera_check.cpp tests/tile_scene.cpp
+      src/reconstruction.cpp src/CameraNavigation.h include/veylaxis/reconstruction.hpp)
+  target_include_directories(Test PRIVATE include src)
+  target_link_libraries(Test PRIVATE GDAL::GDAL unofficial::osg::osg unofficial::osg::osgDB unofficial::osg::osgGA)
+  add_dependencies(Test Veylaxis)
+  target_link_libraries(Test PRIVATE VgdsData nlohmann_json::nlohmann_json GDAL::GDAL)
+  if(VEYLAXIS_VGDS_OSGB)
+    veylaxis_add_streaming(Test)
+    target_link_libraries(Test PRIVATE VgdsOsgBuilder)
+    target_sources(Test PRIVATE tests/vgds/StreamingTests.cpp tests/vgds/NavigationModelTests.cpp)
+    add_test(NAME vgds_streaming COMMAND Test --vgds-streaming)
+    add_test(NAME navigation_models COMMAND Test --navigation-models)
+    add_test(NAME dmu_models COMMAND Test --dmu-models)
+    set_tests_properties(dmu_models PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
+  add_test(NAME vgds_core COMMAND Test --vgds)
+  add_test(NAME vgds_service COMMAND Test --vgds-service)
+  target_sources(Test PRIVATE tests/vgds/CoreTests.cpp tests/vgds/ServiceTests.cpp tests/vgds/S57Tests.cpp)
+  target_compile_definitions(Test PRIVATE VEYLAXIS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+  add_test(NAME vgds_s57 COMMAND Test --vgds-s57)
+  target_sources(Test PRIVATE tests/vgds/CatalogTests.cpp tests/vgds/IslandTerrainTests.cpp)
+  add_test(NAME vgds_island COMMAND Test --island)
+  target_sources(Test PRIVATE tests/vgds/SeabedMaritimeTests.cpp)
+  add_test(NAME vgds_seabed_maritime COMMAND Test --seabed-maritime)
+  target_sources(Test PRIVATE tests/vgds/AcceptanceTests.cpp)
+  add_test(NAME vgds_acceptance COMMAND Test --acceptance)
+  add_test(NAME vgds_catalog COMMAND Test --catalog)
+  set_property(TARGET Test PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+  source_group(TREE "${CMAKE_SOURCE_DIR}" FILES tests/main.cpp tests/reconstruction_tests.cpp
+      tests/raster_check.cpp tests/scene_check.cpp tests/camera_check.cpp tests/tile_scene.cpp src/reconstruction.cpp src/CameraNavigation.h include/veylaxis/reconstruction.hpp)
+  add_test(NAME reconstruction COMMAND Test)
+  add_test(NAME region001_generate COMMAND Veylaxis reconstruct --input ${CMAKE_SOURCE_DIR}/S57_DATA/ENC_ROOT/US2EC04M/US2EC04M.000 --output ${CMAKE_BINARY_DIR}/test-region001)
+  add_test(NAME region001_validate COMMAND Test --raster ${CMAKE_BINARY_DIR}/test-region001/region001_elevation.tif)
+  add_test(NAME region001_scene COMMAND Veylaxis view ${CMAKE_BINARY_DIR}/test-region001/region001_elevation.tif --export ${CMAKE_BINARY_DIR}/test-region001/region001_terrain.osgt)
+  add_test(NAME region001_model_scale COMMAND Test --scene ${CMAKE_BINARY_DIR}/test-region001/region001_terrain.osgt ${CMAKE_BINARY_DIR}/test-region001/region001_elevation.tif)
+  set_tests_properties(region001_generate PROPERTIES FIXTURES_SETUP region001)
+  set_tests_properties(region001_validate region001_scene PROPERTIES FIXTURES_REQUIRED region001)
+  set_tests_properties(region001_scene PROPERTIES FIXTURES_SETUP region001_model)
+  set_tests_properties(region001_model_scale PROPERTIES FIXTURES_REQUIRED region001_model)
+endif()
+
+set(prefix "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}")
+foreach(t Veylaxis Test VgdsService)
+  if(TARGET ${t})
+    if(MSVC)
+      target_compile_options(${t} PRIVATE /W4 /utf-8)
+    endif()
+    if(DEFINED VCPKG_INSTALLED_DIR)
+      set_property(TARGET ${t} PROPERTY VS_DEBUGGER_ENVIRONMENT
+        "PATH=${prefix}/$<IF:$<CONFIG:Debug>,debug/bin,bin>;%PATH%\nGDAL_DATA=${prefix}/share/gdal\nS57_CSV=${prefix}/share/gdal\nPROJ_DATA=${prefix}/share/proj\nGDAL_DRIVER_PATH=disable\nOSG_LIBRARY_PATH=${prefix}/$<IF:$<CONFIG:Debug>,debug/plugins,plugins>/osgPlugins-3.6.5")
+    endif()
+  endif()
+endforeach()
+if(BUILD_TESTING AND DEFINED VCPKG_INSTALLED_DIR)
+  if(VEYLAXIS_VGDS_OSGB)
+    set_tests_properties(vgds_streaming navigation_models dmu_models PROPERTIES
+      ENVIRONMENT "GDAL_DATA=${prefix}/share/gdal;S57_CSV=${prefix}/share/gdal;PROJ_DATA=${prefix}/share/proj;GDAL_DRIVER_PATH=disable;OSG_LIBRARY_PATH=${prefix}/$<IF:$<CONFIG:Debug>,debug/plugins,plugins>/osgPlugins-3.6.5"
+      ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${prefix}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+  endif()
+  set_tests_properties(vgds_acceptance vgds_seabed_maritime vgds_island vgds_catalog vgds_s57 vgds_service reconstruction region001_generate region001_validate region001_scene region001_model_scale PROPERTIES
+    ENVIRONMENT "GDAL_DATA=${prefix}/share/gdal;S57_CSV=${prefix}/share/gdal;PROJ_DATA=${prefix}/share/proj;GDAL_DRIVER_PATH=disable;OSG_LIBRARY_PATH=${prefix}/$<IF:$<CONFIG:Debug>,debug/plugins,plugins>/osgPlugins-3.6.5"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${prefix}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+endif()
+
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+  # Keep just the application/test and the explicitly introduced service/library targets.
+  file(RELATIVE_PATH solution_build "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}")
+  set(test_project "")
+  set(vgds_projects "  <Project Path=\"${solution_build}/VgdsData.vcxproj\"/>\n  <Project Path=\"${solution_build}/VgdsService.vcxproj\"/>\n")
+  if(VEYLAXIS_VGDS_OSGB)
+    string(APPEND vgds_projects "  <Project Path=\"${solution_build}/VgdsOsgBuilder.vcxproj\"/>\n")
+  endif()
+  if(BUILD_TESTING)
+    set(test_project "  <Project Path=\"${solution_build}/Test.vcxproj\"><BuildDependency Project=\"${solution_build}/Veylaxis.vcxproj\"/></Project>\n")
+  endif()
+  file(WRITE "${CMAKE_SOURCE_DIR}/Veylaxis.slnx"
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Solution>\n  <Configurations>\n    <BuildType Name=\"Debug\"/>\n    <BuildType Name=\"Release\"/>\n    <BuildType Name=\"MinSizeRel\"/>\n    <BuildType Name=\"RelWithDebInfo\"/>\n    <Platform Name=\"x64\"/>\n  </Configurations>\n  <Project Path=\"${solution_build}/Veylaxis.vcxproj\"/>\n${test_project}${vgds_projects}</Solution>\n")
+endif()

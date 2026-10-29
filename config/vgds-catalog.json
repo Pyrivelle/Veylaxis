@@ -1,0 +1,13 @@
+{
+  "grid": {"id": "utm19-demo-v1", "crs": "EPSG:32619", "origin": [503500, 4856500], "size": 1000},
+  "source": {
+    "kind": "catalog", "root": "S57_DATA/ENC_ROOT", "index": "output/vgds/enc-catalog.json",
+    "max_resident_cells": 3, "max_cache_entries": 128, "max_cache_bytes": 536870912,
+    "bathymetry": true, "maritime": true
+  },
+  "cache": "output/vgds-cache/catalog", "osgb": true,
+  "start": [498700, 4860750],
+  "layers": ["land", "coastline", "terrain", "fairway", "dredged_areas", "navigation_aids"],
+  "terrain_spacing_m": 10, "motion_speed_mps": 150,
+  "island_terrain": {"enabled": true, "height_m": 42, "shore_scale_m": 200, "slope_exponent": 1.25, "spacing_m": 25, "normal_step_m": 0.5, "base_depth_m": 12}
+}

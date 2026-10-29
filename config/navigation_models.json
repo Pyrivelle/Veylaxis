@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "maxCachedModels": 64,
+  "vesselModelPath": "",
+  "mappings": [
+    {
+      "id": "port",
+      "label": "左侧标",
+      "objectClass": "BOYLAT",
+      "attribute": "CATLAM",
+      "value": 1,
+      "modelPath": ""
+    },
+    {
+      "id": "starboard",
+      "label": "右侧标",
+      "objectClass": "BOYLAT",
+      "attribute": "CATLAM",
+      "value": 2,
+      "modelPath": ""
+    },
+    {
+      "id": "north",
+      "label": "北方位标",
+      "objectClass": "BOYCAR",
+      "attribute": "CATCAM",
+      "value": 1,
+      "modelPath": ""
+    },
+    {
+      "id": "east",
+      "label": "东方位标",
+      "objectClass": "BOYCAR",
+      "attribute": "CATCAM",
+      "value": 2,
+      "modelPath": ""
+    },
+    {
+      "id": "south",
+      "label": "南方位标",
+      "objectClass": "BOYCAR",
+      "attribute": "CATCAM",
+      "value": 3,
+      "modelPath": ""
+    },
+    {
+      "id": "west",
+      "label": "西方位标",
+      "objectClass": "BOYCAR",
+      "attribute": "CATCAM",
+      "value": 4,
+      "modelPath": ""
+    },
+    {
+      "id": "isolated-danger",
+      "label": "孤立危险标",
+      "objectClass": "BOYISD",
+      "modelPath": ""
+    },
+    {
+      "id": "safe-water",
+      "label": "安全水域标",
+      "objectClass": "BOYSAW",
+      "modelPath": ""
+    },
+    {
+      "id": "special",
+      "label": "特殊标志",
+      "objectClass": "BOYSPP",
+      "modelPath": ""
+    },
+    {
+      "id": "light-vessel",
+      "label": "灯船",
+      "objectClass": "LITVES",
+      "modelPath": ""
+    },
+    {
+      "id": "bollard",
+      "label": "系缆柱",
+      "objectClass": "MORFAC",
+      "attribute": "CATMOR",
+      "value": 3,
+      "modelPath": ""
+    },
+    {
+      "id": "post-pile",
+      "label": "系泊桩",
+      "objectClass": "MORFAC",
+      "attribute": "CATMOR",
+      "value": 5,
+      "modelPath": ""
+    },
+    {
+      "id": "mooring-buoy",
+      "label": "系泊浮筒",
+      "objectClass": "MORFAC",
+      "attribute": "CATMOR",
+      "value": 7,
+      "modelPath": ""
+    },
+    {
+      "id": "berth-flag",
+      "label": "自定义泊位旗（可选）",
+      "objectClass": "BERTHS",
+      "modelPath": ""
+    }
+  ]
+}
